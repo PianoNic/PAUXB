@@ -34,7 +34,6 @@ fun AppsScreen(
     discoveredApps: List<TermuxBridge.DiscoveredApp>,
     onStartApp: (LinuxApp) -> Unit,
     onStopApp: (LinuxApp) -> Unit,
-    onOpenApp: (LinuxApp) -> Unit,
     onInstallApp: (String, String, String) -> Unit,
     onRefreshApps: () -> Unit,
     onAddToHomeScreen: (LinuxApp) -> Unit,
@@ -82,7 +81,6 @@ fun AppsScreen(
                         app = app,
                         onStart = { onStartApp(app) },
                         onStop = { onStopApp(app) },
-                        onOpen = { onOpenApp(app) },
                         onAddToHome = { onAddToHomeScreen(app) }
                     )
                 }
@@ -166,7 +164,6 @@ private fun AppCard(
     app: LinuxApp,
     onStart: () -> Unit,
     onStop: () -> Unit,
-    onOpen: () -> Unit,
     onAddToHome: () -> Unit
 ) {
     Card(
@@ -205,9 +202,6 @@ private fun AppCard(
                         contentDescription = "Add to Home Screen",
                         tint = MaterialTheme.colorScheme.secondary
                     )
-                }
-                TextButton(onClick = onOpen) {
-                    Text("Open")
                 }
                 IconButton(onClick = onStop) {
                     Icon(

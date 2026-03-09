@@ -370,7 +370,7 @@ class TermuxBridge(private val context: Context) {
             return
         }
 
-        val intent = Intent(context, Class.forName("ch.pianonic.pauxb.MainActivity")).apply {
+        val intent = Intent(context, Class.forName("ch.pianonic.pauxb.AppStreamActivity")).apply {
             action = "ch.pianonic.pauxb.LAUNCH_APP"
             putExtra("app_id", appId)
             putExtra("app_name", appName)

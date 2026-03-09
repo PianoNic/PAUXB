@@ -21,13 +21,16 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import ch.pianonic.pauxb.bridge.TermuxBridge
 import ch.pianonic.pauxb.data.AppStorage
 import ch.pianonic.pauxb.data.SettingsStorage
 import ch.pianonic.pauxb.terminal.TerminalSession
-import ch.pianonic.pauxb.ui.screens.*
+import ch.pianonic.pauxb.ui.screens.LinuxApp
+import ch.pianonic.pauxb.ui.screens.SetupScreen
+import ch.pianonic.pauxb.ui.screens.AppsScreen
+import ch.pianonic.pauxb.ui.screens.TerminalScreen
+import ch.pianonic.pauxb.ui.screens.SettingsScreen
 import ch.pianonic.pauxb.ui.theme.PAUXBTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -37,10 +40,6 @@ class MainActivity : ComponentActivity() {
     private lateinit var appStorage: AppStorage
     private lateinit var settingsStorage: SettingsStorage
     private val terminalSession = TerminalSession()
-
-    private var launchAppId: String? = null
-    private var launchAppName: String? = null
-    private var launchAppCommand: String? = null
 
     private var hasRunCommandPermission = mutableStateOf(false)
 
@@ -57,7 +56,6 @@ class MainActivity : ComponentActivity() {
         settingsStorage = SettingsStorage(this)
         enableEdgeToEdge()
 
-        handleLaunchIntent(intent)
         requestStoragePermission()
 
         hasRunCommandPermission.value = bridge.hasRunCommandPermission()
@@ -76,9 +74,6 @@ class MainActivity : ComponentActivity() {
                     appStorage = appStorage,
                     settingsStorage = settingsStorage,
                     terminalSession = terminalSession,
-                    launchAppId = launchAppId,
-                    launchAppName = launchAppName,
-                    launchAppCommand = launchAppCommand,
                     hasRunCommandPermission = permissionGranted,
                     onRequestRunCommandPermission = {
                         runCommandPermissionLauncher.launch("com.termux.permission.RUN_COMMAND")
@@ -110,19 +105,6 @@ class MainActivity : ComponentActivity() {
         hasRunCommandPermission.value = bridge.hasRunCommandPermission()
     }
 
-    override fun onNewIntent(intent: Intent) {
-        super.onNewIntent(intent)
-        handleLaunchIntent(intent)
-    }
-
-    private fun handleLaunchIntent(intent: Intent?) {
-        if (intent?.action == "ch.pianonic.pauxb.LAUNCH_APP") {
-            launchAppId = intent.getStringExtra("app_id")
-            launchAppName = intent.getStringExtra("app_name")
-            launchAppCommand = intent.getStringExtra("app_command")
-        }
-    }
-
     override fun onDestroy() {
         super.onDestroy()
         terminalSession.stop()
@@ -130,7 +112,7 @@ class MainActivity : ComponentActivity() {
 }
 
 enum class Screen {
-    SETUP, APPS, TERMINAL, SETTINGS, APP_STREAM
+    SETUP, APPS, TERMINAL, SETTINGS
 }
 
 @Composable
@@ -139,9 +121,6 @@ fun PAUXBApp(
     appStorage: AppStorage,
     settingsStorage: SettingsStorage,
     terminalSession: TerminalSession,
-    launchAppId: String? = null,
-    launchAppName: String? = null,
-    launchAppCommand: String? = null,
     hasRunCommandPermission: Boolean = true,
     onRequestRunCommandPermission: () -> Unit = {}
 ) {
@@ -151,7 +130,6 @@ fun PAUXBApp(
     var isTermuxReady by remember { mutableStateOf(true) }
     var apps by remember { mutableStateOf(appStorage.loadApps()) }
     var discoveredApps by remember { mutableStateOf(listOf<TermuxBridge.DiscoveredApp>()) }
-    var streamingApp by remember { mutableStateOf<LinuxApp?>(null) }
     val scope = rememberCoroutineScope()
 
     // Save apps whenever the list changes
@@ -191,47 +169,6 @@ fun PAUXBApp(
                 setupStatus = "Termux is installed. Ready to setup."
             }
         }
-    }
-
-    // Handle shortcut launch
-    LaunchedEffect(launchAppId) {
-        if (launchAppId != null && launchAppName != null && launchAppCommand != null) {
-            bridge.startApp(launchAppId, launchAppCommand)
-            val app = LinuxApp(
-                id = launchAppId,
-                name = launchAppName,
-                command = launchAppCommand,
-                packageName = "",
-                vncPort = 5910,
-                isRunning = true
-            )
-            if (apps.none { it.id == launchAppId }) {
-                apps = apps + app
-            } else {
-                apps = apps.map {
-                    if (it.id == launchAppId) it.copy(isRunning = true, vncPort = 5910)
-                    else it
-                }
-            }
-            streamingApp = app
-            currentScreen = Screen.APP_STREAM
-        }
-    }
-
-    if (currentScreen == Screen.APP_STREAM && streamingApp != null) {
-        AppStreamScreen(
-            appName = streamingApp!!.name,
-            vncPort = streamingApp!!.vncPort ?: 5910,
-            appId = streamingApp!!.id,
-            onBack = {
-                streamingApp = null
-                currentScreen = Screen.APPS
-            },
-            onResizeRequest = { appId, width, height ->
-                bridge.resizeApp(appId, width, height)
-            }
-        )
-        return
     }
 
     Scaffold(
@@ -322,10 +259,6 @@ fun PAUXBApp(
                         else it
                     }
                 },
-                onOpenApp = { app ->
-                    streamingApp = app
-                    currentScreen = Screen.APP_STREAM
-                },
                 onInstallApp = { name, pkg, cmd ->
                     bridge.installPackage(pkg)
                     val appId = name.lowercase().replace(" ", "_")
@@ -370,8 +303,6 @@ fun PAUXBApp(
                 settingsStorage = settingsStorage,
                 modifier = Modifier.padding(innerPadding)
             )
-
-            Screen.APP_STREAM -> {}
         }
     }
 }
