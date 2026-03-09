@@ -201,12 +201,31 @@ class TermuxBridge(private val context: Context) {
     }
 
     /**
-     * Install a package in Debian
+     * Install a package in Debian with status tracking.
+     * Writes progress to /sdcard/.pauxb/install_<pkg>.status
      */
     fun installPackage(packageName: String) {
+        val statusFile = "/sdcard/.pauxb/install_${packageName}.status"
         runInTermux(
-            "proot-distro login debian -- apt-get install -y $packageName"
+            "mkdir -p /sdcard/.pauxb && " +
+            "echo 'INSTALLING' > $statusFile && " +
+            "if proot-distro login debian -- apt-get install -y $packageName >> /sdcard/.pauxb/install_${packageName}.log 2>&1; then " +
+            "echo 'INSTALL_COMPLETE' > $statusFile; " +
+            "else echo 'INSTALL_FAILED' > $statusFile; fi",
+            background = true
         )
+    }
+
+    /**
+     * Poll the install status for a package.
+     */
+    suspend fun getInstallStatus(packageName: String): String = withContext(Dispatchers.IO) {
+        try {
+            val file = File("/sdcard/.pauxb/install_${packageName}.status")
+            if (file.exists()) file.readText().trim() else "UNKNOWN"
+        } catch (e: Exception) {
+            "UNKNOWN"
+        }
     }
 
     /**

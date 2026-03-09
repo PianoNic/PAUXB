@@ -24,7 +24,9 @@ data class LinuxApp(
     val command: String,
     val packageName: String,
     val vncPort: Int? = null,
-    val isRunning: Boolean = false
+    val isRunning: Boolean = false,
+    val isInstalling: Boolean = false,
+    val installError: String? = null
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -186,7 +188,30 @@ private fun AppCard(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                if (app.isRunning && app.vncPort != null) {
+                if (app.isInstalling) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.padding(top = 4.dp)
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(14.dp),
+                            strokeWidth = 2.dp
+                        )
+                        Text(
+                            text = "Installing...",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.tertiary
+                        )
+                    }
+                } else if (app.installError != null) {
+                    Text(
+                        text = "Install failed: ${app.installError}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                } else if (app.isRunning && app.vncPort != null) {
                     Text(
                         text = "VNC :${app.vncPort}",
                         style = MaterialTheme.typography.bodySmall,
@@ -195,7 +220,9 @@ private fun AppCard(
                 }
             }
 
-            if (app.isRunning) {
+            if (app.isInstalling) {
+                // No actions while installing
+            } else if (app.isRunning) {
                 IconButton(onClick = onAddToHome) {
                     Icon(
                         Icons.Default.Home,
