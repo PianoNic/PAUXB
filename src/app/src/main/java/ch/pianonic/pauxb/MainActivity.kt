@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -29,6 +30,8 @@ import ch.pianonic.pauxb.terminal.TerminalSession
 import ch.pianonic.pauxb.ui.screens.LinuxApp
 import ch.pianonic.pauxb.ui.screens.SetupScreen
 import ch.pianonic.pauxb.ui.screens.AppsScreen
+import ch.pianonic.pauxb.ui.screens.StoreScreen
+import ch.pianonic.pauxb.ui.screens.DebianSearchResult
 import ch.pianonic.pauxb.ui.screens.TerminalScreen
 import ch.pianonic.pauxb.ui.screens.SettingsScreen
 import ch.pianonic.pauxb.ui.theme.PAUXBTheme
@@ -112,7 +115,7 @@ class MainActivity : ComponentActivity() {
 }
 
 enum class Screen {
-    SETUP, APPS, TERMINAL, SETTINGS
+    SETUP, APPS, STORE, TERMINAL, SETTINGS
 }
 
 @Composable
@@ -130,6 +133,8 @@ fun PAUXBApp(
     var isTermuxReady by remember { mutableStateOf(true) }
     var apps by remember { mutableStateOf(appStorage.loadApps()) }
     var discoveredApps by remember { mutableStateOf(listOf<TermuxBridge.DiscoveredApp>()) }
+    var debianSearchResults by remember { mutableStateOf(listOf<DebianSearchResult>()) }
+    var isSearchingDebian by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     // Save apps whenever the list changes
@@ -185,6 +190,12 @@ fun PAUXBApp(
                     label = { Text("Apps") },
                     selected = currentScreen == Screen.APPS,
                     onClick = { currentScreen = Screen.APPS }
+                )
+                NavigationBarItem(
+                    icon = { Icon(Icons.Default.ShoppingCart, contentDescription = "Store") },
+                    label = { Text("Store") },
+                    selected = currentScreen == Screen.STORE,
+                    onClick = { currentScreen = Screen.STORE }
                 )
                 NavigationBarItem(
                     icon = { Icon(Icons.Default.PlayArrow, contentDescription = "Terminal") },
@@ -311,6 +322,65 @@ fun PAUXBApp(
                         )
                     }
                 },
+                modifier = Modifier.padding(innerPadding)
+            )
+
+            Screen.STORE -> StoreScreen(
+                installedAppIds = apps.map { it.id }.toSet(),
+                installingAppIds = apps.filter { it.isInstalling }.map { it.id }.toSet(),
+                onInstallApp = { name, pkg, cmd ->
+                    val appId = name.lowercase().replace(" ", "_")
+                    if (apps.none { it.id == appId }) {
+                        bridge.installPackage(pkg)
+                        apps = apps + LinuxApp(
+                            id = appId,
+                            name = name,
+                            command = cmd,
+                            packageName = pkg,
+                            isInstalling = true
+                        )
+                        scope.launch {
+                            while (true) {
+                                delay(2000)
+                                val status = bridge.getInstallStatus(pkg)
+                                if (status == "INSTALL_COMPLETE") {
+                                    apps = apps.map {
+                                        if (it.id == appId) it.copy(isInstalling = false, installError = null)
+                                        else it
+                                    }
+                                    break
+                                } else if (status == "INSTALL_FAILED") {
+                                    apps = apps.map {
+                                        if (it.id == appId) it.copy(isInstalling = false, installError = "apt-get failed")
+                                        else it
+                                    }
+                                    break
+                                }
+                            }
+                        }
+                    }
+                },
+                onSearchDebian = { query ->
+                    isSearchingDebian = true
+                    debianSearchResults = emptyList()
+                    bridge.searchDebianPackages(query)
+                    scope.launch {
+                        while (true) {
+                            delay(2000)
+                            val status = bridge.getSearchStatus()
+                            if (status == "SEARCH_DONE") {
+                                val results = bridge.getSearchResults()
+                                debianSearchResults = results.map { (name, pkg, desc) ->
+                                    DebianSearchResult(name, pkg, desc)
+                                }
+                                isSearchingDebian = false
+                                break
+                            }
+                        }
+                    }
+                },
+                debianSearchResults = debianSearchResults,
+                isSearching = isSearchingDebian,
                 modifier = Modifier.padding(innerPadding)
             )
 
