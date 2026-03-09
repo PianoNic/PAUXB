@@ -196,17 +196,38 @@ fun PAUXBApp(
         }
     ) { innerPadding ->
         when (currentScreen) {
-            Screen.SETUP -> SetupScreen(
-                onRunSetup = {
-                    isSettingUp = true
-                    setupStatus = "Starting setup..."
-                    bridge.runSetup()
-                },
-                onOpenTermux = { bridge.openTermux() },
-                setupStatus = setupStatus,
-                isSettingUp = isSettingUp,
-                modifier = Modifier.padding(innerPadding)
-            )
+            Screen.SETUP -> {
+                // Poll setup status while setting up
+                if (isSettingUp) {
+                    LaunchedEffect(Unit) {
+                        while (true) {
+                            delay(2000)
+                            bridge.pollSetupStatus()
+                            delay(1000)
+                            val status = bridge.getSetupStatus()
+                            if (status != "NOT_SETUP" && status.isNotBlank()) {
+                                setupStatus = status
+                            }
+                            if (status.contains("SETUP_COMPLETE") || status.contains("PHASE:COMPLETE")) {
+                                isSettingUp = false
+                                break
+                            }
+                        }
+                    }
+                }
+
+                SetupScreen(
+                    onRunSetup = {
+                        isSettingUp = true
+                        setupStatus = "Starting setup..."
+                        bridge.runSetup()
+                    },
+                    onOpenTermux = { bridge.openTermux() },
+                    setupStatus = setupStatus,
+                    isSettingUp = isSettingUp,
+                    modifier = Modifier.padding(innerPadding)
+                )
+            }
 
             Screen.APPS -> AppsScreen(
                 apps = apps,
