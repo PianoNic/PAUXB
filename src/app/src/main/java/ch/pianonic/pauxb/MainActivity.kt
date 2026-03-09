@@ -266,8 +266,29 @@ fun PAUXBApp(
                         id = appId,
                         name = name,
                         command = cmd,
-                        packageName = pkg
+                        packageName = pkg,
+                        isInstalling = true
                     )
+                    // Poll for install completion
+                    scope.launch {
+                        while (true) {
+                            delay(2000)
+                            val status = bridge.getInstallStatus(pkg)
+                            if (status == "INSTALL_COMPLETE") {
+                                apps = apps.map {
+                                    if (it.id == appId) it.copy(isInstalling = false, installError = null)
+                                    else it
+                                }
+                                break
+                            } else if (status == "INSTALL_FAILED") {
+                                apps = apps.map {
+                                    if (it.id == appId) it.copy(isInstalling = false, installError = "apt-get failed")
+                                    else it
+                                }
+                                break
+                            }
+                        }
+                    }
                 },
                 onRefreshApps = {
                     bridge.scanInstalledApps()
