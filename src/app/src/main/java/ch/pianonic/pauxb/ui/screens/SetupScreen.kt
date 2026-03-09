@@ -6,6 +6,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -23,6 +24,7 @@ fun SetupScreen(
     isSettingUp: Boolean,
     hasRunCommandPermission: Boolean = true,
     onRequestPermission: () -> Unit = {},
+    isTermuxReady: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     // Parse current phase from status string
@@ -165,11 +167,63 @@ fun SetupScreen(
             }
         }
 
+        if (hasRunCommandPermission && !isTermuxReady) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.tertiaryContainer
+                )
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Info,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.tertiary
+                        )
+                        Text(
+                            text = "Termux Configuration Needed",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.tertiary
+                        )
+                    }
+                    Text(
+                        text = "Termux needs to allow external apps. Open Termux and run:",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer
+                    )
+                    Text(
+                        text = "echo 'allow-external-apps = true' >> ~/.termux/termux.properties",
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer
+                    )
+                    Text(
+                        text = "Then restart Termux and return here.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer
+                    )
+                    OutlinedButton(
+                        onClick = onOpenTermux,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Open Termux")
+                    }
+                }
+            }
+        }
+
         Spacer(modifier = Modifier.height(8.dp))
 
         Button(
             onClick = onRunSetup,
-            enabled = !isSettingUp && hasRunCommandPermission,
+            enabled = !isSettingUp && hasRunCommandPermission && isTermuxReady,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp)
