@@ -2,6 +2,9 @@ package ch.pianonic.pauxb.bridge
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ShortcutInfo
+import android.content.pm.ShortcutManager
+import android.graphics.drawable.Icon
 import android.util.Log
 import kotlinx.coroutines.*
 import java.io.*
@@ -185,4 +188,143 @@ class TermuxBridge(private val context: Context) {
     fun openDebianShell() {
         runInTermux("proot-distro login debian")
     }
+
+    /**
+     * Scan Debian for installed GUI applications by reading .desktop files.
+     * Runs the scan inside Termux/Debian and writes results to a shared file.
+     */
+    fun scanInstalledApps() {
+        val outputFile = "$PAUXB_DIR/installed_apps.txt"
+        val scanCmd = """
+            DIRS="/usr/share/applications /usr/local/share/applications"
+            > /tmp/pauxb_apps.txt
+            for dir in ${'$'}DIRS; do
+                [ -d "${'$'}dir" ] || continue
+                for desktop in "${'$'}dir"/*.desktop; do
+                    [ -f "${'$'}desktop" ] || continue
+                    name=""; exec_cmd=""; icon=""; no_display=""; comment=""
+                    while IFS='=' read -r key value; do
+                        case "${'$'}key" in
+                            Name) [ -z "${'$'}name" ] && name="${'$'}value" ;;
+                            Exec) [ -z "${'$'}exec_cmd" ] && exec_cmd="${'$'}value" ;;
+                            Icon) [ -z "${'$'}icon" ] && icon="${'$'}value" ;;
+                            Comment) [ -z "${'$'}comment" ] && comment="${'$'}value" ;;
+                            NoDisplay) no_display="${'$'}value" ;;
+                        esac
+                    done < "${'$'}desktop"
+                    [ "${'$'}no_display" = "true" ] && continue
+                    exec_cmd=${'$'}(echo "${'$'}exec_cmd" | sed 's/ %[fFuUdDnNickvm]//g')
+                    [ -z "${'$'}name" ] || [ -z "${'$'}exec_cmd" ] && continue
+                    filename=${'$'}(basename "${'$'}desktop")
+                    echo "${'$'}{name}|${'$'}{exec_cmd}|${'$'}{icon}|${'$'}{comment}|${'$'}{filename}" >> /tmp/pauxb_apps.txt
+                done
+            done
+            cat /tmp/pauxb_apps.txt
+        """.trimIndent()
+
+        val outputPath = context.filesDir.absolutePath + "/installed_apps.txt"
+        // Write to multiple locations for accessibility
+        runInTermux(
+            "RESULT=\$(proot-distro login debian -- bash -c '$scanCmd' 2>/dev/null); " +
+            "echo \"\$RESULT\" > /sdcard/pauxb_apps.txt 2>/dev/null; " +
+            "echo \"\$RESULT\" > /data/local/tmp/pauxb_apps.txt 2>/dev/null; " +
+            "echo \"\$RESULT\" > $PAUXB_DIR/installed_apps.txt 2>/dev/null",
+            background = true
+        )
+    }
+
+    /**
+     * Read the cached list of installed GUI apps.
+     * Tries multiple locations where the scan output may be written.
+     */
+    suspend fun getInstalledApps(): List<DiscoveredApp> = withContext(Dispatchers.IO) {
+        val paths = listOf(
+            File(context.filesDir, "installed_apps.txt"),
+            File("/sdcard/pauxb_apps.txt"),
+            File("/data/local/tmp/pauxb_apps.txt")
+        )
+
+        for (cacheFile in paths) {
+            try {
+                if (!cacheFile.exists()) continue
+                val output = cacheFile.readText()
+                if (output.isBlank()) continue
+                Log.d(TAG, "Read ${output.lines().size} lines from ${cacheFile.absolutePath}")
+                val apps = parseAppList(output)
+                if (apps.isNotEmpty()) return@withContext apps
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to read from ${cacheFile.absolutePath}: ${e.message}")
+            }
+        }
+
+        Log.d(TAG, "No cached app list found in any location")
+        emptyList()
+    }
+
+    private fun parseAppList(output: String): List<DiscoveredApp> {
+        return output.lines()
+            .filter { it.contains("|") }
+            .mapNotNull { line ->
+                val parts = line.split("|", limit = 5)
+                if (parts.size < 2) return@mapNotNull null
+                val name = parts[0].trim()
+                val exec = parts[1].trim()
+                if (name.isBlank() || exec.isBlank()) return@mapNotNull null
+
+                val icon = parts.getOrNull(2)?.trim()?.takeIf { it.isNotBlank() }
+                val comment = parts.getOrNull(3)?.trim()?.takeIf { it.isNotBlank() }
+                val desktopFile = parts.getOrNull(4)?.trim() ?: "$name.desktop"
+                val appId = desktopFile.removeSuffix(".desktop").lowercase().replace(Regex("[^a-z0-9]"), "_")
+
+                DiscoveredApp(
+                    id = appId,
+                    name = name,
+                    command = exec,
+                    iconName = icon,
+                    description = comment,
+                    categories = null,
+                    desktopFile = desktopFile
+                )
+            }
+            .sortedBy { it.name }
+    }
+
+    /**
+     * Create a home screen shortcut for a Linux app.
+     * The shortcut launches PAUXB directly into the app's VNC stream.
+     */
+    fun createAppShortcut(appId: String, appName: String, command: String) {
+        val shortcutManager = context.getSystemService(ShortcutManager::class.java) ?: return
+
+        if (!shortcutManager.isRequestPinShortcutSupported) {
+            Log.w(TAG, "Pinned shortcuts not supported")
+            return
+        }
+
+        val intent = Intent(context, Class.forName("ch.pianonic.pauxb.MainActivity")).apply {
+            action = "ch.pianonic.pauxb.LAUNCH_APP"
+            putExtra("app_id", appId)
+            putExtra("app_name", appName)
+            putExtra("app_command", command)
+        }
+
+        val shortcut = ShortcutInfo.Builder(context, "pauxb_$appId")
+            .setShortLabel(appName)
+            .setLongLabel("$appName (Linux)")
+            .setIcon(Icon.createWithResource(context, android.R.drawable.sym_def_app_icon))
+            .setIntent(intent)
+            .build()
+
+        shortcutManager.requestPinShortcut(shortcut, null)
+    }
+
+    data class DiscoveredApp(
+        val id: String,
+        val name: String,
+        val command: String,
+        val iconName: String?,
+        val description: String?,
+        val categories: String?,
+        val desktopFile: String
+    )
 }
