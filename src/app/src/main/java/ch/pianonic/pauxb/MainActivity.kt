@@ -6,7 +6,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
-import android.provider.Settings
+import android.provider.Settings as SystemSettings
 import android.net.Uri
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -17,6 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -24,6 +25,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import ch.pianonic.pauxb.bridge.TermuxBridge
 import ch.pianonic.pauxb.data.AppStorage
+import ch.pianonic.pauxb.data.SettingsStorage
 import ch.pianonic.pauxb.terminal.TerminalSession
 import ch.pianonic.pauxb.ui.screens.*
 import ch.pianonic.pauxb.ui.theme.PAUXBTheme
@@ -33,6 +35,7 @@ import kotlinx.coroutines.launch
 class MainActivity : ComponentActivity() {
     private lateinit var bridge: TermuxBridge
     private lateinit var appStorage: AppStorage
+    private lateinit var settingsStorage: SettingsStorage
     private val terminalSession = TerminalSession()
 
     private var launchAppId: String? = null
@@ -43,16 +46,24 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         bridge = TermuxBridge(this)
         appStorage = AppStorage(this)
+        settingsStorage = SettingsStorage(this)
         enableEdgeToEdge()
 
         handleLaunchIntent(intent)
         requestStoragePermission()
 
         setContent {
-            PAUXBTheme {
+            val themeMode by settingsStorage.themeMode.collectAsState()
+            val dynamicColor by settingsStorage.dynamicColor.collectAsState()
+
+            PAUXBTheme(
+                themeMode = themeMode,
+                dynamicColor = dynamicColor
+            ) {
                 PAUXBApp(
                     bridge = bridge,
                     appStorage = appStorage,
+                    settingsStorage = settingsStorage,
                     terminalSession = terminalSession,
                     launchAppId = launchAppId,
                     launchAppName = launchAppName,
@@ -65,7 +76,7 @@ class MainActivity : ComponentActivity() {
     private fun requestStoragePermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             if (!Environment.isExternalStorageManager()) {
-                val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
+                val intent = Intent(SystemSettings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
                     data = Uri.parse("package:$packageName")
                 }
                 startActivity(intent)
@@ -99,13 +110,14 @@ class MainActivity : ComponentActivity() {
 }
 
 enum class Screen {
-    SETUP, APPS, TERMINAL, APP_STREAM
+    SETUP, APPS, TERMINAL, SETTINGS, APP_STREAM
 }
 
 @Composable
 fun PAUXBApp(
     bridge: TermuxBridge,
     appStorage: AppStorage,
+    settingsStorage: SettingsStorage,
     terminalSession: TerminalSession,
     launchAppId: String? = null,
     launchAppName: String? = null,
@@ -195,6 +207,12 @@ fun PAUXBApp(
                     label = { Text("Terminal") },
                     selected = currentScreen == Screen.TERMINAL,
                     onClick = { currentScreen = Screen.TERMINAL }
+                )
+                NavigationBarItem(
+                    icon = { Icon(Icons.Default.Settings, contentDescription = "Settings") },
+                    label = { Text("Settings") },
+                    selected = currentScreen == Screen.SETTINGS,
+                    onClick = { currentScreen = Screen.SETTINGS }
                 )
             }
         }
@@ -290,6 +308,11 @@ fun PAUXBApp(
 
             Screen.TERMINAL -> TerminalScreen(
                 session = terminalSession,
+                modifier = Modifier.padding(innerPadding)
+            )
+
+            Screen.SETTINGS -> SettingsScreen(
+                settingsStorage = settingsStorage,
                 modifier = Modifier.padding(innerPadding)
             )
 
