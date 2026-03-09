@@ -41,10 +41,10 @@ fun SetupScreen(
     val isComplete = currentPhase >= 5
 
     // Extract the human-readable message after the phase prefix
-    val statusMessage = if (setupStatus.contains(" - ")) {
-        setupStatus.substringAfter(" - ")
-    } else {
-        setupStatus
+    val statusMessage = when {
+        setupStatus.contains("SETUP_COMPLETE") -> "Setup complete!"
+        setupStatus.contains(" - ") -> setupStatus.substringAfter(" - ")
+        else -> setupStatus
     }
 
     Column(
@@ -116,7 +116,7 @@ fun SetupScreen(
                     text = "What this will set up:",
                     style = MaterialTheme.typography.titleSmall
                 )
-                SetupStep("1", "Install proot-distro & VNC in Termux", completed = currentPhase > 1)
+                SetupStep("1", "Install Termux dependencies", completed = currentPhase > 1)
                 SetupStep("2", "Install Debian Linux environment", completed = currentPhase > 2)
                 SetupStep("3", "Configure X11/VNC display streaming", completed = currentPhase > 3)
                 SetupStep("4", "Install PAUXB bridge daemon", completed = currentPhase > 4)
