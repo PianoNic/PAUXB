@@ -2,10 +2,12 @@ package ch.pianonic.pauxb.bridge
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.pm.ShortcutInfo
 import android.content.pm.ShortcutManager
 import android.graphics.drawable.Icon
 import android.util.Log
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.*
 import java.io.*
 
@@ -43,6 +45,17 @@ class TermuxBridge(private val context: Context) {
         } catch (e: Exception) {
             false
         }
+    }
+
+    /**
+     * Check if the RUN_COMMAND permission is granted.
+     * This permission is required to execute commands in Termux.
+     */
+    fun hasRunCommandPermission(): Boolean {
+        return ContextCompat.checkSelfPermission(
+            context,
+            "com.termux.permission.RUN_COMMAND"
+        ) == PackageManager.PERMISSION_GRANTED
     }
 
     /**
