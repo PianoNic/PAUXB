@@ -223,7 +223,7 @@ fun SetupScreen(
 
         Button(
             onClick = onRunSetup,
-            enabled = !isSettingUp && hasRunCommandPermission && isTermuxReady,
+            enabled = !isSettingUp && !isComplete && hasRunCommandPermission && isTermuxReady,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp)
