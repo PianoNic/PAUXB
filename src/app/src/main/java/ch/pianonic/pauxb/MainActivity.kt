@@ -42,6 +42,14 @@ class MainActivity : ComponentActivity() {
     private var launchAppName: String? = null
     private var launchAppCommand: String? = null
 
+    private var hasRunCommandPermission = mutableStateOf(false)
+
+    private val runCommandPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        hasRunCommandPermission.value = granted
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         bridge = TermuxBridge(this)
@@ -52,9 +60,12 @@ class MainActivity : ComponentActivity() {
         handleLaunchIntent(intent)
         requestStoragePermission()
 
+        hasRunCommandPermission.value = bridge.hasRunCommandPermission()
+
         setContent {
             val themeMode by settingsStorage.themeMode.collectAsState()
             val dynamicColor by settingsStorage.dynamicColor.collectAsState()
+            val permissionGranted by hasRunCommandPermission
 
             PAUXBTheme(
                 themeMode = themeMode,
@@ -67,7 +78,11 @@ class MainActivity : ComponentActivity() {
                     terminalSession = terminalSession,
                     launchAppId = launchAppId,
                     launchAppName = launchAppName,
-                    launchAppCommand = launchAppCommand
+                    launchAppCommand = launchAppCommand,
+                    hasRunCommandPermission = permissionGranted,
+                    onRequestRunCommandPermission = {
+                        runCommandPermissionLauncher.launch("com.termux.permission.RUN_COMMAND")
+                    }
                 )
             }
         }
@@ -88,6 +103,11 @@ class MainActivity : ComponentActivity() {
                     .launch(Manifest.permission.READ_EXTERNAL_STORAGE)
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        hasRunCommandPermission.value = bridge.hasRunCommandPermission()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -121,7 +141,9 @@ fun PAUXBApp(
     terminalSession: TerminalSession,
     launchAppId: String? = null,
     launchAppName: String? = null,
-    launchAppCommand: String? = null
+    launchAppCommand: String? = null,
+    hasRunCommandPermission: Boolean = true,
+    onRequestRunCommandPermission: () -> Unit = {}
 ) {
     var currentScreen by remember { mutableStateOf(Screen.SETUP) }
     var setupStatus by remember { mutableStateOf("Not started") }
@@ -247,6 +269,8 @@ fun PAUXBApp(
                     onOpenTermux = { bridge.openTermux() },
                     setupStatus = setupStatus,
                     isSettingUp = isSettingUp,
+                    hasRunCommandPermission = hasRunCommandPermission,
+                    onRequestPermission = onRequestRunCommandPermission,
                     modifier = Modifier.padding(innerPadding)
                 )
             }
