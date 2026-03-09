@@ -3,6 +3,7 @@ package ch.pianonic.pauxb.vnc
 import android.view.MotionEvent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
@@ -14,6 +15,7 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
@@ -22,12 +24,14 @@ import androidx.compose.ui.unit.IntSize
 /**
  * Composable that displays a VNC stream and handles touch input.
  * Responsively scales the remote display to fill available space.
+ * Double-tap to toggle fullscreen.
  */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun VncView(
     vncClient: VncClient,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onToggleFullscreen: (() -> Unit)? = null
 ) {
     val frame by vncClient.frame.collectAsState()
     val isConnected by vncClient.connected.collectAsState()
@@ -68,6 +72,15 @@ fun VncView(
 
                 vncClient.sendPointerEvent(vncX, vncY, buttonMask)
                 true
+            }
+            .let { mod ->
+                if (onToggleFullscreen != null) {
+                    mod.pointerInput(Unit) {
+                        detectTapGestures(
+                            onDoubleTap = { onToggleFullscreen() }
+                        )
+                    }
+                } else mod
             },
         contentAlignment = Alignment.Center
     ) {

@@ -326,4 +326,15 @@ class VncClient {
 
     fun getFrameWidth() = fbWidth
     fun getFrameHeight() = fbHeight
+
+    /**
+     * Called when the Android viewport size changes (e.g. DeX window resize).
+     * Stores the new viewport dimensions for potential future use
+     * (e.g. requesting the VNC server to resize via xrandr).
+     */
+    fun onViewportResized(widthPx: Int, heightPx: Int) {
+        Log.d(TAG, "Viewport resized to ${widthPx}x${heightPx}")
+        // Future: could send a DesktopSize pseudo-encoding request
+        // or trigger an xrandr resize via the bridge daemon
+    }
 }
