@@ -1,0 +1,21 @@
+# Build outputs
+src/build/
+src/app/build/
+src/.gradle/
+
+# IDE
+.idea/
+*.iml
+
+# Local properties
+src/local.properties
+
+# APK files
+*.apk
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Development assets (not part of the source)
+/assets/
