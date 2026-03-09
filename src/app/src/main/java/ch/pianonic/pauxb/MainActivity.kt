@@ -170,6 +170,7 @@ fun PAUXBApp(
             if (existingStatus.contains("SETUP_COMPLETE") || existingStatus.contains("PHASE:COMPLETE")) {
                 setupStatus = existingStatus
                 isSettingUp = false
+                currentScreen = Screen.APPS
             } else if (isTermuxReady) {
                 setupStatus = "Termux is installed. Ready to setup."
             } else {
