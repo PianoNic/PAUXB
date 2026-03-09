@@ -362,6 +362,7 @@ fun PAUXBApp(
 
             Screen.TERMINAL -> TerminalScreen(
                 session = terminalSession,
+                bridge = bridge,
                 modifier = Modifier.padding(innerPadding)
             )
 

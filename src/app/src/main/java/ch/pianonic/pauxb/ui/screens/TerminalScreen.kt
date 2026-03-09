@@ -18,11 +18,13 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import ch.pianonic.pauxb.bridge.TermuxBridge
 import ch.pianonic.pauxb.terminal.TerminalSession
 
 @Composable
 fun TerminalScreen(
     session: TerminalSession,
+    bridge: TermuxBridge,
     modifier: Modifier = Modifier
 ) {
     val output by session.output.collectAsState()
@@ -38,7 +40,7 @@ fun TerminalScreen(
     // Start session if not running
     LaunchedEffect(Unit) {
         if (!isRunning) {
-            session.start(useDebian = false)
+            session.start(bridge, useDebian = false)
         }
     }
 
