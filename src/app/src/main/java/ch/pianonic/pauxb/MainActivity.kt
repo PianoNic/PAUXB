@@ -1,10 +1,17 @@
 package ch.pianonic.pauxb
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
+import android.os.Environment
+import android.provider.Settings
+import android.net.Uri
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
@@ -13,7 +20,10 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
 import ch.pianonic.pauxb.bridge.TermuxBridge
+import ch.pianonic.pauxb.data.AppStorage
 import ch.pianonic.pauxb.terminal.TerminalSession
 import ch.pianonic.pauxb.ui.screens.*
 import ch.pianonic.pauxb.ui.theme.PAUXBTheme
@@ -22,9 +32,9 @@ import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     private lateinit var bridge: TermuxBridge
+    private lateinit var appStorage: AppStorage
     private val terminalSession = TerminalSession()
 
-    // For shortcut-launched apps
     private var launchAppId: String? = null
     private var launchAppName: String? = null
     private var launchAppCommand: String? = null
@@ -32,19 +42,39 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         bridge = TermuxBridge(this)
+        appStorage = AppStorage(this)
         enableEdgeToEdge()
 
         handleLaunchIntent(intent)
+        requestStoragePermission()
 
         setContent {
             PAUXBTheme {
                 PAUXBApp(
                     bridge = bridge,
+                    appStorage = appStorage,
                     terminalSession = terminalSession,
                     launchAppId = launchAppId,
                     launchAppName = launchAppName,
                     launchAppCommand = launchAppCommand
                 )
+            }
+        }
+    }
+
+    private fun requestStoragePermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            if (!Environment.isExternalStorageManager()) {
+                val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
+                    data = Uri.parse("package:$packageName")
+                }
+                startActivity(intent)
+            }
+        } else {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE)
+                != PackageManager.PERMISSION_GRANTED) {
+                registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
+                    .launch(Manifest.permission.READ_EXTERNAL_STORAGE)
             }
         }
     }
@@ -75,6 +105,7 @@ enum class Screen {
 @Composable
 fun PAUXBApp(
     bridge: TermuxBridge,
+    appStorage: AppStorage,
     terminalSession: TerminalSession,
     launchAppId: String? = null,
     launchAppName: String? = null,
@@ -83,23 +114,27 @@ fun PAUXBApp(
     var currentScreen by remember { mutableStateOf(Screen.SETUP) }
     var setupStatus by remember { mutableStateOf("Not started") }
     var isSettingUp by remember { mutableStateOf(false) }
-    var apps by remember { mutableStateOf(listOf<LinuxApp>()) }
+    var apps by remember { mutableStateOf(appStorage.loadApps()) }
     var discoveredApps by remember { mutableStateOf(listOf<TermuxBridge.DiscoveredApp>()) }
     var streamingApp by remember { mutableStateOf<LinuxApp?>(null) }
     val scope = rememberCoroutineScope()
+
+    // Save apps whenever the list changes
+    LaunchedEffect(apps) {
+        appStorage.saveApps(apps)
+    }
 
     // Check if Termux is installed and scan for apps on launch
     LaunchedEffect(Unit) {
         if (bridge.isTermuxInstalled()) {
             setupStatus = "Termux is installed. Ready to setup."
-            // Scan for installed apps
             discoveredApps = bridge.getInstalledApps()
         } else {
             setupStatus = "Termux not found. Please install Termux from GitHub."
         }
     }
 
-    // Handle shortcut launch - start the app and go directly to stream
+    // Handle shortcut launch
     LaunchedEffect(launchAppId) {
         if (launchAppId != null && launchAppName != null && launchAppCommand != null) {
             bridge.startApp(launchAppId, launchAppCommand)
@@ -111,7 +146,6 @@ fun PAUXBApp(
                 vncPort = 5910,
                 isRunning = true
             )
-            // Add to list if not already there
             if (apps.none { it.id == launchAppId }) {
                 apps = apps + app
             } else {
@@ -206,10 +240,9 @@ fun PAUXBApp(
                     )
                 },
                 onRefreshApps = {
-                    // Trigger scan in Termux, then read results after it completes
                     bridge.scanInstalledApps()
                     scope.launch {
-                        delay(3000) // Wait for scan to complete
+                        delay(3000)
                         discoveredApps = bridge.getInstalledApps()
                     }
                 },
@@ -235,7 +268,7 @@ fun PAUXBApp(
                 modifier = Modifier.padding(innerPadding)
             )
 
-            Screen.APP_STREAM -> {} // Handled above
+            Screen.APP_STREAM -> {}
         }
     }
 }
