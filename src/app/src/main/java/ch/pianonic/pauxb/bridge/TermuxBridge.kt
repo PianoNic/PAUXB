@@ -165,10 +165,34 @@ class TermuxBridge(private val context: Context) {
     }
 
     /**
-     * Get setup status
+     * Get setup status by reading the status file.
+     * The setup script writes progress to $PAUXB_DIR/status.
      */
     fun checkStatus() {
         runInTermux("cat $PAUXB_DIR/status 2>/dev/null || echo NOT_SETUP", background = true)
+    }
+
+    /**
+     * Poll the setup status file and return the current phase.
+     * Writes status to /sdcard/pauxb_status.txt for cross-app access.
+     */
+    fun pollSetupStatus() {
+        runInTermux(
+            "cat $PAUXB_DIR/status > /sdcard/pauxb_status.txt 2>/dev/null",
+            background = true
+        )
+    }
+
+    /**
+     * Read the polled setup status.
+     */
+    suspend fun getSetupStatus(): String = withContext(Dispatchers.IO) {
+        try {
+            val file = File("/sdcard/pauxb_status.txt")
+            if (file.exists()) file.readText().trim() else "NOT_SETUP"
+        } catch (e: Exception) {
+            "NOT_SETUP"
+        }
     }
 
     /**

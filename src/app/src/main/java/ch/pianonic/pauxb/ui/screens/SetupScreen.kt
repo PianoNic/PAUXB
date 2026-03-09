@@ -4,6 +4,8 @@ import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -20,6 +22,26 @@ fun SetupScreen(
     isSettingUp: Boolean,
     modifier: Modifier = Modifier
 ) {
+    // Parse current phase from status string
+    val currentPhase = when {
+        setupStatus.contains("PHASE:COMPLETE") || setupStatus.contains("SETUP_COMPLETE") -> 5
+        setupStatus.contains("PHASE:INSTALL_BRIDGE") -> 4
+        setupStatus.contains("PHASE:SETUP_DEBIAN") -> 3
+        setupStatus.contains("PHASE:INSTALL_DEBIAN") -> 2
+        setupStatus.contains("PHASE:INSTALL_DEPS") || setupStatus.contains("PHASE:UPDATE") -> 1
+        isSettingUp -> 0
+        else -> -1
+    }
+
+    val isComplete = currentPhase >= 5
+
+    // Extract the human-readable message after the phase prefix
+    val statusMessage = if (setupStatus.contains(" - ")) {
+        setupStatus.substringAfter(" - ")
+    } else {
+        setupStatus
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -58,17 +80,17 @@ fun SetupScreen(
                 )
 
                 Text(
-                    text = setupStatus,
+                    text = statusMessage,
                     fontFamily = FontFamily.Monospace,
                     fontSize = 14.sp,
                     color = when {
-                        setupStatus.contains("COMPLETE") -> MaterialTheme.colorScheme.primary
+                        isComplete -> MaterialTheme.colorScheme.primary
                         setupStatus.contains("ERROR") -> MaterialTheme.colorScheme.error
                         else -> MaterialTheme.colorScheme.onSurfaceVariant
                     }
                 )
 
-                if (isSettingUp) {
+                if (isSettingUp && !isComplete) {
                     LinearProgressIndicator(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -89,10 +111,10 @@ fun SetupScreen(
                     text = "What this will set up:",
                     style = MaterialTheme.typography.titleSmall
                 )
-                SetupStep("1", "Install proot-distro & VNC in Termux")
-                SetupStep("2", "Install Debian Linux environment")
-                SetupStep("3", "Configure X11/VNC display streaming")
-                SetupStep("4", "Install PAUXB bridge daemon")
+                SetupStep("1", "Install proot-distro & VNC in Termux", completed = currentPhase > 1)
+                SetupStep("2", "Install Debian Linux environment", completed = currentPhase > 2)
+                SetupStep("3", "Configure X11/VNC display streaming", completed = currentPhase > 3)
+                SetupStep("4", "Install PAUXB bridge daemon", completed = currentPhase > 4)
             }
         }
 
@@ -105,13 +127,17 @@ fun SetupScreen(
                 .fillMaxWidth()
                 .height(56.dp)
         ) {
-            if (isSettingUp) {
+            if (isSettingUp && !isComplete) {
                 CircularProgressIndicator(
                     modifier = Modifier.size(24.dp),
                     color = MaterialTheme.colorScheme.onPrimary
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("Setting up...")
+            } else if (isComplete) {
+                Icon(Icons.Default.Check, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Setup Complete", fontSize = 18.sp)
             } else {
                 Text("Run Setup", fontSize = 18.sp)
             }
@@ -127,27 +153,39 @@ fun SetupScreen(
 }
 
 @Composable
-private fun SetupStep(number: String, description: String) {
+private fun SetupStep(number: String, description: String, completed: Boolean = false) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Surface(
             shape = MaterialTheme.shapes.small,
-            color = MaterialTheme.colorScheme.primaryContainer,
+            color = if (completed) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.primaryContainer,
             modifier = Modifier.size(28.dp)
         ) {
             Box(contentAlignment = Alignment.Center) {
-                Text(
-                    text = number,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                    fontSize = 14.sp
-                )
+                if (completed) {
+                    Icon(
+                        Icons.Default.Check,
+                        contentDescription = "Complete",
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(16.dp)
+                    )
+                } else {
+                    Text(
+                        text = number,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        fontSize = 14.sp
+                    )
+                }
             }
         }
         Text(
             text = description,
-            style = MaterialTheme.typography.bodyMedium
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (completed) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurface
         )
     }
 }
