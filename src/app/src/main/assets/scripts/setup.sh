@@ -2,8 +2,6 @@
 # PAUXB - Initial Setup Script
 # Sets up Termux + Debian proot environment with X11/VNC support
 
-set -e
-
 LOG_FILE="$HOME/.pauxb/setup.log"
 STATUS_FILE="$HOME/.pauxb/status"
 mkdir -p "$HOME/.pauxb"
@@ -13,23 +11,38 @@ log() {
     echo "$1" > "$STATUS_FILE"
 }
 
+fail() {
+    log "ERROR - $1"
+    exit 1
+}
+
 log "PHASE:UPDATE - Updating Termux packages..."
-pkg update -y >> "$LOG_FILE" 2>&1
+if ! pkg update -y >> "$LOG_FILE" 2>&1; then
+    fail "Failed to update Termux packages. Check your internet connection."
+fi
 
 log "PHASE:INSTALL_DEPS - Installing Termux dependencies..."
-pkg install -y proot-distro x11-repo >> "$LOG_FILE" 2>&1
-pkg install -y tigervnc pulseaudio >> "$LOG_FILE" 2>&1
+if ! pkg install -y proot-distro x11-repo >> "$LOG_FILE" 2>&1; then
+    fail "Failed to install proot-distro or x11-repo."
+fi
+if ! pkg install -y tigervnc pulseaudio >> "$LOG_FILE" 2>&1; then
+    fail "Failed to install tigervnc or pulseaudio."
+fi
 
 log "PHASE:INSTALL_DEBIAN - Installing Debian via proot-distro..."
+DEBIAN_ROOT="$PREFIX/var/lib/proot-distro/installed-rootfs/debian"
 if proot-distro list 2>/dev/null | grep -q "debian.*installed"; then
-    log "Debian already installed, skipping..."
+    log "PHASE:INSTALL_DEBIAN - Debian already installed, skipping..."
 else
-    proot-distro install debian >> "$LOG_FILE" 2>&1
+    proot-distro install debian >> "$LOG_FILE" 2>&1 || true
+    # Verify Debian was actually installed despite possible non-zero exit code
+    if [ ! -d "$DEBIAN_ROOT/etc" ]; then
+        fail "Debian installation failed. Check the log at $LOG_FILE"
+    fi
 fi
 
 log "PHASE:SETUP_DEBIAN - Configuring Debian environment..."
-proot-distro login debian -- bash -c '
-set -e
+if ! proot-distro login debian -- bash -c '
 export DEBIAN_FRONTEND=noninteractive
 
 apt-get update -y
@@ -49,15 +62,15 @@ apt-get install -y --no-install-recommends \
 
 # Generate locale
 sed -i "s/# en_US.UTF-8/en_US.UTF-8/" /etc/locale.gen
-locale-gen
+locale-gen || true
 
 # Create the bridge daemon directory
 mkdir -p /opt/pauxb
-' >> "$LOG_FILE" 2>&1
+' >> "$LOG_FILE" 2>&1; then
+    fail "Failed to configure Debian environment. Check the log at $LOG_FILE"
+fi
 
 log "PHASE:INSTALL_BRIDGE - Installing PAUXB bridge daemon..."
-# Copy bridge daemon into Debian
-DEBIAN_ROOT="$PREFIX/var/lib/proot-distro/installed-rootfs/debian"
 
 cat > "$DEBIAN_ROOT/opt/pauxb/bridge.sh" << 'BRIDGE'
 #!/bin/bash

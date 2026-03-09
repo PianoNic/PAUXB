@@ -273,6 +273,10 @@ fun PAUXBApp(
                                 isSettingUp = false
                                 break
                             }
+                            if (status.contains("ERROR")) {
+                                isSettingUp = false
+                                break
+                            }
                         }
                     }
                 }
