@@ -163,9 +163,13 @@ fun PAUXBApp(
         AppStreamScreen(
             appName = streamingApp!!.name,
             vncPort = streamingApp!!.vncPort ?: 5910,
+            appId = streamingApp!!.id,
             onBack = {
                 streamingApp = null
                 currentScreen = Screen.APPS
+            },
+            onResizeRequest = { appId, width, height ->
+                bridge.resizeApp(appId, width, height)
             }
         )
         return

@@ -24,7 +24,9 @@ import ch.pianonic.pauxb.vnc.VncView
 fun AppStreamScreen(
     appName: String,
     vncPort: Int,
+    appId: String = "",
     onBack: () -> Unit,
+    onResizeRequest: ((String, Int, Int) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val vncClient = remember { VncClient() }
@@ -43,6 +45,15 @@ fun AppStreamScreen(
         activity?.window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         onDispose {
             activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+    }
+
+    // Wire up resize callback to bridge
+    LaunchedEffect(Unit) {
+        if (onResizeRequest != null && appId.isNotEmpty()) {
+            vncClient.setResizeCallback { w, h ->
+                onResizeRequest(appId, w, h)
+            }
         }
     }
 

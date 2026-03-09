@@ -327,14 +327,32 @@ class VncClient {
     fun getFrameWidth() = fbWidth
     fun getFrameHeight() = fbHeight
 
+    private var viewportWidth = 0
+    private var viewportHeight = 0
+    private var resizeCallback: ((Int, Int) -> Unit)? = null
+
+    /**
+     * Set a callback that will be invoked when the viewport size changes significantly.
+     * Used to trigger xrandr resize via the bridge daemon.
+     */
+    fun setResizeCallback(callback: (width: Int, height: Int) -> Unit) {
+        resizeCallback = callback
+    }
+
     /**
      * Called when the Android viewport size changes (e.g. DeX window resize).
-     * Stores the new viewport dimensions for potential future use
-     * (e.g. requesting the VNC server to resize via xrandr).
+     * Triggers a resize callback if dimensions changed significantly.
      */
     fun onViewportResized(widthPx: Int, heightPx: Int) {
-        Log.d(TAG, "Viewport resized to ${widthPx}x${heightPx}")
-        // Future: could send a DesktopSize pseudo-encoding request
-        // or trigger an xrandr resize via the bridge daemon
+        if (widthPx <= 0 || heightPx <= 0) return
+        // Only trigger resize if changed by more than 50px (avoid noise)
+        val widthDiff = kotlin.math.abs(widthPx - viewportWidth)
+        val heightDiff = kotlin.math.abs(heightPx - viewportHeight)
+        if (widthDiff > 50 || heightDiff > 50) {
+            viewportWidth = widthPx
+            viewportHeight = heightPx
+            Log.d(TAG, "Viewport resized to ${widthPx}x${heightPx}")
+            resizeCallback?.invoke(widthPx, heightPx)
+        }
     }
 }
