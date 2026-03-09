@@ -163,7 +163,14 @@ fun PAUXBApp(
     LaunchedEffect(Unit) {
         if (bridge.isTermuxInstalled()) {
             isTermuxReady = bridge.isTermuxExternalAppsEnabled()
-            if (isTermuxReady) {
+            // Check if setup was already completed
+            bridge.pollSetupStatus()
+            delay(1500)
+            val existingStatus = bridge.getSetupStatus()
+            if (existingStatus.contains("SETUP_COMPLETE") || existingStatus.contains("PHASE:COMPLETE")) {
+                setupStatus = existingStatus
+                isSettingUp = false
+            } else if (isTermuxReady) {
                 setupStatus = "Termux is installed. Ready to setup."
             } else {
                 setupStatus = "Termux needs configuration. See instructions below."
