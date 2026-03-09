@@ -47,7 +47,36 @@ else
 fi
 
 log "PHASE:SETUP_DEBIAN - Configuring Debian environment..."
+
+# Ensure DNS works inside Debian proot.
+# proot often can't do DNS resolution, so we resolve hostnames from Termux
+# (where DNS works) and inject them into Debian's /etc/hosts.
+DEBIAN_ROOT="$PREFIX/var/lib/proot-distro/installed-rootfs/debian"
+
+# Set up resolv.conf
+echo "nameserver 8.8.8.8" > "$DEBIAN_ROOT/etc/resolv.conf"
+echo "nameserver 8.8.4.4" >> "$DEBIAN_ROOT/etc/resolv.conf"
+
+# Resolve Debian mirror IPs from Termux and inject into hosts file
+HOSTS_FILE="$DEBIAN_ROOT/etc/hosts"
+cp "$HOSTS_FILE" "$HOSTS_FILE.bak" 2>/dev/null || true
+for host in deb.debian.org security.debian.org; do
+    ip=$(getent hosts "$host" 2>/dev/null | head -1 | awk '{print $1}')
+    if [ -z "$ip" ]; then
+        ip=$(ping -c1 -W3 "$host" 2>/dev/null | grep -oP '\(\K[0-9.]+' | head -1)
+    fi
+    if [ -n "$ip" ]; then
+        # Remove old entries for this host, then add new one
+        sed -i "/$host/d" "$HOSTS_FILE" 2>/dev/null
+        echo "$ip $host" >> "$HOSTS_FILE"
+        log "PHASE:SETUP_DEBIAN - Resolved $host -> $ip"
+    else
+        log "PHASE:SETUP_DEBIAN - WARNING: Could not resolve $host"
+    fi
+done
+
 if ! proot-distro login debian -- bash -c '
+set -e
 export DEBIAN_FRONTEND=noninteractive
 
 apt-get update -y
@@ -65,6 +94,14 @@ apt-get install -y --no-install-recommends \
     ca-certificates \
     locales
 
+# Verify critical packages actually installed
+for cmd in Xvfb x11vnc xterm; do
+    if ! command -v "$cmd" > /dev/null 2>&1; then
+        echo "ERROR: $cmd not found after install" >&2
+        exit 1
+    fi
+done
+
 # Generate locale
 sed -i "s/# en_US.UTF-8/en_US.UTF-8/" /etc/locale.gen
 locale-gen || true
@@ -72,7 +109,7 @@ locale-gen || true
 # Create the bridge daemon directory
 mkdir -p /opt/pauxb
 ' >> "$LOG_FILE" 2>&1; then
-    fail "Failed to configure Debian environment. Try running setup again."
+    fail "Failed to configure Debian environment. Check your internet connection and try again."
 fi
 
 log "PHASE:INSTALL_BRIDGE - Installing PAUXB bridge daemon..."
