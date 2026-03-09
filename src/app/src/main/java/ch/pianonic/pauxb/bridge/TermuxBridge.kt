@@ -229,6 +229,53 @@ class TermuxBridge(private val context: Context) {
     }
 
     /**
+     * Search Debian packages via apt-cache search.
+     * Writes results to a shared file for polling.
+     */
+    fun searchDebianPackages(query: String) {
+        runInTermux(
+            "mkdir -p /sdcard/.pauxb && " +
+            "echo 'SEARCHING' > /sdcard/.pauxb/search_status.txt && " +
+            "proot-distro login debian -- apt-cache search '$query' 2>/dev/null | head -50 > /sdcard/.pauxb/search_results.txt && " +
+            "echo 'SEARCH_DONE' > /sdcard/.pauxb/search_status.txt",
+            background = true
+        )
+    }
+
+    /**
+     * Get the Debian package search status.
+     */
+    suspend fun getSearchStatus(): String = withContext(Dispatchers.IO) {
+        try {
+            val file = File("/sdcard/.pauxb/search_status.txt")
+            if (file.exists()) file.readText().trim() else "IDLE"
+        } catch (e: Exception) {
+            "IDLE"
+        }
+    }
+
+    /**
+     * Read Debian package search results.
+     */
+    suspend fun getSearchResults(): List<Triple<String, String, String>> = withContext(Dispatchers.IO) {
+        try {
+            val file = File("/sdcard/.pauxb/search_results.txt")
+            if (!file.exists()) return@withContext emptyList()
+            file.readLines()
+                .filter { it.contains(" - ") }
+                .map { line ->
+                    val pkg = line.substringBefore(" - ").trim()
+                    val desc = line.substringAfter(" - ").trim()
+                    // Use package name as display name, capitalize first letter
+                    val displayName = pkg.replaceFirstChar { it.uppercase() }
+                    Triple(displayName, pkg, desc)
+                }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    /**
      * Get setup status by reading the status file.
      * The setup script writes progress to $PAUXB_DIR/status.
      */
