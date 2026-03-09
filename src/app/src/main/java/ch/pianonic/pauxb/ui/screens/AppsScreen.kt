@@ -5,14 +5,18 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import ch.pianonic.pauxb.bridge.TermuxBridge
 
 data class LinuxApp(
     val id: String,
@@ -27,15 +31,29 @@ data class LinuxApp(
 @Composable
 fun AppsScreen(
     apps: List<LinuxApp>,
+    discoveredApps: List<TermuxBridge.DiscoveredApp>,
     onStartApp: (LinuxApp) -> Unit,
     onStopApp: (LinuxApp) -> Unit,
     onOpenApp: (LinuxApp) -> Unit,
     onInstallApp: (String, String, String) -> Unit,
+    onRefreshApps: () -> Unit,
+    onAddToHomeScreen: (LinuxApp) -> Unit,
+    onAddDiscoveredApp: (TermuxBridge.DiscoveredApp) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var showInstallDialog by remember { mutableStateOf(false) }
 
     Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Linux Apps") },
+                actions = {
+                    IconButton(onClick = onRefreshApps) {
+                        Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+                    }
+                }
+            )
+        },
         floatingActionButton = {
             FloatingActionButton(onClick = { showInstallDialog = true }) {
                 Icon(Icons.Default.Add, contentDescription = "Add App")
@@ -43,42 +61,90 @@ fun AppsScreen(
         },
         modifier = modifier
     ) { padding ->
-        if (apps.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
+        LazyColumn(
+            modifier = Modifier.padding(padding),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // Running / configured apps section
+            if (apps.isNotEmpty()) {
+                item {
                     Text(
-                        text = "No apps configured",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = "Tap + to add a Linux app",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        text = "My Apps",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(vertical = 4.dp)
                     )
                 }
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier.padding(padding),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
                 items(apps) { app ->
                     AppCard(
                         app = app,
                         onStart = { onStartApp(app) },
                         onStop = { onStopApp(app) },
-                        onOpen = { onOpenApp(app) }
+                        onOpen = { onOpenApp(app) },
+                        onAddToHome = { onAddToHomeScreen(app) }
                     )
+                }
+            }
+
+            // Discovered installed apps section
+            val addedIds = apps.map { it.id }.toSet()
+            val newApps = discoveredApps.filter { it.id !in addedIds }
+
+            if (newApps.isNotEmpty()) {
+                item {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Installed on Debian",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.secondary,
+                        modifier = Modifier.padding(vertical = 4.dp)
+                    )
+                    Text(
+                        text = "Apps found in your Debian environment",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                items(newApps) { app ->
+                    DiscoveredAppCard(
+                        app = app,
+                        onAdd = { onAddDiscoveredApp(app) }
+                    )
+                }
+            }
+
+            if (apps.isEmpty() && newApps.isEmpty()) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 64.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = "No apps found",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = "Tap + to add manually, or refresh to scan Debian",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            OutlinedButton(onClick = onRefreshApps) {
+                                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Scan for apps")
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -100,7 +166,8 @@ private fun AppCard(
     app: LinuxApp,
     onStart: () -> Unit,
     onStop: () -> Unit,
-    onOpen: () -> Unit
+    onOpen: () -> Unit,
+    onAddToHome: () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth()
@@ -132,6 +199,13 @@ private fun AppCard(
             }
 
             if (app.isRunning) {
+                IconButton(onClick = onAddToHome) {
+                    Icon(
+                        Icons.Default.Home,
+                        contentDescription = "Add to Home Screen",
+                        tint = MaterialTheme.colorScheme.secondary
+                    )
+                }
                 TextButton(onClick = onOpen) {
                     Text("Open")
                 }
@@ -143,6 +217,13 @@ private fun AppCard(
                     )
                 }
             } else {
+                IconButton(onClick = onAddToHome) {
+                    Icon(
+                        Icons.Default.Home,
+                        contentDescription = "Add to Home Screen",
+                        tint = MaterialTheme.colorScheme.secondary
+                    )
+                }
                 IconButton(onClick = onStart) {
                     Icon(
                         Icons.Default.PlayArrow,
@@ -150,6 +231,48 @@ private fun AppCard(
                         tint = MaterialTheme.colorScheme.primary
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DiscoveredAppCard(
+    app: TermuxBridge.DiscoveredApp,
+    onAdd: () -> Unit
+) {
+    OutlinedCard(
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = app.name,
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Text(
+                    text = app.command,
+                    fontFamily = FontFamily.Monospace,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                if (app.description != null) {
+                    Text(
+                        text = app.description,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1
+                    )
+                }
+            }
+
+            Button(onClick = onAdd) {
+                Text("Add")
             }
         }
     }
