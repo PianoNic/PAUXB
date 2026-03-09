@@ -22,11 +22,8 @@ if ! pkg update -y >> "$LOG_FILE" 2>&1; then
 fi
 
 log "PHASE:INSTALL_DEPS - Installing Termux dependencies..."
-if ! pkg install -y proot-distro x11-repo >> "$LOG_FILE" 2>&1; then
-    fail "Failed to install proot-distro or x11-repo."
-fi
-if ! pkg install -y tigervnc pulseaudio >> "$LOG_FILE" 2>&1; then
-    fail "Failed to install tigervnc or pulseaudio."
+if ! pkg install -y proot-distro pulseaudio >> "$LOG_FILE" 2>&1; then
+    fail "Failed to install Termux dependencies. Check your internet connection."
 fi
 
 log "PHASE:INSTALL_DEBIAN - Installing Debian via proot-distro..."
@@ -34,10 +31,18 @@ DEBIAN_ROOT="$PREFIX/var/lib/proot-distro/installed-rootfs/debian"
 if proot-distro list 2>/dev/null | grep -q "debian.*installed"; then
     log "PHASE:INSTALL_DEBIAN - Debian already installed, skipping..."
 else
-    proot-distro install debian >> "$LOG_FILE" 2>&1 || true
-    # Verify Debian was actually installed despite possible non-zero exit code
-    if [ ! -d "$DEBIAN_ROOT/etc" ]; then
-        fail "Debian installation failed. Check the log at $LOG_FILE"
+    # proot-distro install can fail during dpkg-reconfigure locales on some
+    # devices/emulators and then rolls back the entire extraction. To handle
+    # this, we patch the debian plugin to make the failing step non-fatal.
+    PLUGIN="$PREFIX/etc/proot-distro/debian.sh"
+    if [ -f "$PLUGIN" ]; then
+        sed -i 's/run_proot_cmd DEBIAN_FRONTEND=noninteractive dpkg-reconfigure locales/run_proot_cmd DEBIAN_FRONTEND=noninteractive dpkg-reconfigure locales || true/' "$PLUGIN"
+    fi
+    if ! proot-distro install debian >> "$LOG_FILE" 2>&1; then
+        # Check if it installed despite non-zero exit
+        if [ ! -d "$DEBIAN_ROOT/etc" ]; then
+            fail "Debian installation failed. Please check your internet connection and try again."
+        fi
     fi
 fi
 
@@ -67,7 +72,7 @@ locale-gen || true
 # Create the bridge daemon directory
 mkdir -p /opt/pauxb
 ' >> "$LOG_FILE" 2>&1; then
-    fail "Failed to configure Debian environment. Check the log at $LOG_FILE"
+    fail "Failed to configure Debian environment. Try running setup again."
 fi
 
 log "PHASE:INSTALL_BRIDGE - Installing PAUXB bridge daemon..."
