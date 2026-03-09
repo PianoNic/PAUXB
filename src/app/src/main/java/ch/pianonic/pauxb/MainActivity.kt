@@ -148,6 +148,7 @@ fun PAUXBApp(
     var currentScreen by remember { mutableStateOf(Screen.SETUP) }
     var setupStatus by remember { mutableStateOf("Not started") }
     var isSettingUp by remember { mutableStateOf(false) }
+    var isTermuxReady by remember { mutableStateOf(true) }
     var apps by remember { mutableStateOf(appStorage.loadApps()) }
     var discoveredApps by remember { mutableStateOf(listOf<TermuxBridge.DiscoveredApp>()) }
     var streamingApp by remember { mutableStateOf<LinuxApp?>(null) }
@@ -161,10 +162,26 @@ fun PAUXBApp(
     // Check if Termux is installed and scan for apps on launch
     LaunchedEffect(Unit) {
         if (bridge.isTermuxInstalled()) {
-            setupStatus = "Termux is installed. Ready to setup."
+            isTermuxReady = bridge.isTermuxExternalAppsEnabled()
+            if (isTermuxReady) {
+                setupStatus = "Termux is installed. Ready to setup."
+            } else {
+                setupStatus = "Termux needs configuration. See instructions below."
+            }
             discoveredApps = bridge.getInstalledApps()
         } else {
             setupStatus = "Termux not found. Please install Termux from GitHub."
+            isTermuxReady = false
+        }
+    }
+
+    // Re-check Termux readiness when permission changes
+    LaunchedEffect(hasRunCommandPermission) {
+        if (hasRunCommandPermission && bridge.isTermuxInstalled()) {
+            isTermuxReady = bridge.isTermuxExternalAppsEnabled()
+            if (isTermuxReady) {
+                setupStatus = "Termux is installed. Ready to setup."
+            }
         }
     }
 
@@ -271,6 +288,7 @@ fun PAUXBApp(
                     isSettingUp = isSettingUp,
                     hasRunCommandPermission = hasRunCommandPermission,
                     onRequestPermission = onRequestRunCommandPermission,
+                    isTermuxReady = isTermuxReady,
                     modifier = Modifier.padding(innerPadding)
                 )
             }

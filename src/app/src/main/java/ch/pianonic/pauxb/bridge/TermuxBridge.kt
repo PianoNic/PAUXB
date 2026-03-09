@@ -83,9 +83,30 @@ class TermuxBridge(private val context: Context) {
     }
 
     /**
-     * Execute a command in Termux via the RUN_COMMAND intent
+     * Check if Termux has allow-external-apps enabled by attempting
+     * to resolve the RunCommandService. If the service can't be reached,
+     * it likely means allow-external-apps is not set to true.
      */
-    fun runInTermux(command: String, background: Boolean = false) {
+    fun isTermuxExternalAppsEnabled(): Boolean {
+        if (!isTermuxInstalled()) return false
+        return try {
+            val intent = Intent(ACTION_RUN_COMMAND).apply {
+                setClassName(TERMUX_PKG, TERMUX_SERVICE)
+            }
+            val resolveInfo = context.packageManager.resolveService(intent, 0)
+            resolveInfo != null
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not check Termux external apps status", e)
+            false
+        }
+    }
+
+    /**
+     * Execute a command in Termux via the RUN_COMMAND intent.
+     * Returns true if the intent was sent successfully, false if it failed
+     * (e.g. allow-external-apps not enabled).
+     */
+    fun runInTermux(command: String, background: Boolean = false): Boolean {
         val intent = Intent(ACTION_RUN_COMMAND).apply {
             setClassName(TERMUX_PKG, TERMUX_SERVICE)
             putExtra("com.termux.RUN_COMMAND_PATH", "/data/data/com.termux/files/usr/bin/bash")
@@ -94,14 +115,17 @@ class TermuxBridge(private val context: Context) {
             putExtra("com.termux.RUN_COMMAND_BACKGROUND", background)
         }
 
-        try {
+        return try {
             context.startForegroundService(intent)
+            true
         } catch (e: Exception) {
-            // Fallback to startService
             try {
                 context.startService(intent)
+                true
             } catch (e2: Exception) {
-                Log.e(TAG, "Failed to run command in Termux", e2)
+                Log.e(TAG, "Failed to run command in Termux. " +
+                    "Ensure allow-external-apps is enabled in Termux.", e2)
+                false
             }
         }
     }
