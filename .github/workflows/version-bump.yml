@@ -1,0 +1,88 @@
+name: Version Bump
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_type:
+        description: 'Version bump type'
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+      custom_version:
+        description: 'Custom version (overrides version_type if set)'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  bump-version:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install semver
+        run: npm install -g semver
+
+      - name: Get current version
+        id: current
+        run: |
+          VERSION=$(grep "versionName" src/app/build.gradle.kts | head -1 | sed 's/.*"\(.*\)".*/\1/')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Current version: $VERSION"
+
+      - name: Calculate new version
+        id: new
+        run: |
+          if [ -n "${{ inputs.custom_version }}" ]; then
+            NEW_VERSION="${{ inputs.custom_version }}"
+          else
+            NEW_VERSION=$(semver -i ${{ inputs.version_type }} ${{ steps.current.outputs.version }})
+          fi
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "New version: $NEW_VERSION"
+
+      - name: Update version in build.gradle.kts
+        run: |
+          sed -i "s/versionName = \"${{ steps.current.outputs.version }}\"/versionName = \"${{ steps.new.outputs.version }}\"/" src/app/build.gradle.kts
+          # Increment versionCode
+          CURRENT_CODE=$(grep "versionCode" src/app/build.gradle.kts | head -1 | sed 's/[^0-9]*//g')
+          NEW_CODE=$((CURRENT_CODE + 1))
+          sed -i "s/versionCode = $CURRENT_CODE/versionCode = $NEW_CODE/" src/app/build.gradle.kts
+
+      - name: Commit and tag
+        run: |
+          git config user.name "PianoNic"
+          git config user.email "79938743+Pianonic@users.noreply.github.com"
+          git add src/app/build.gradle.kts
+          git commit -m "chore: bump version to ${{ steps.new.outputs.version }}"
+          git tag -a "v${{ steps.new.outputs.version }}" -m "Release v${{ steps.new.outputs.version }}"
+          git push origin main --follow-tags
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.new.outputs.version }}
+          name: v${{ steps.new.outputs.version }}
+          body: |
+            ## PAUXB v${{ steps.new.outputs.version }}
+
+            ### Artifacts
+            - `pauxb-v${{ steps.new.outputs.version }}.apk` - Release APK
+            - `pauxb-v${{ steps.new.outputs.version }}-debug.apk` - Debug APK
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
