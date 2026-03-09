@@ -156,6 +156,14 @@ class TermuxBridge(private val context: Context) {
     }
 
     /**
+     * Resize a running app's virtual display to match the new viewport size.
+     * Uses xrandr to change the Xvfb resolution dynamically.
+     */
+    fun resizeApp(appId: String, width: Int, height: Int) {
+        bridgeCommand("resize $appId $width $height")
+    }
+
+    /**
      * Install a package in Debian
      */
     fun installPackage(packageName: String) {
