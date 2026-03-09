@@ -16,15 +16,16 @@ Android App  <-->  VNC Client  <-->  x11vnc  <-->  Xvfb  <-->  Linux App
 ## Screenshots
 
 <p align="center">
-  <img src="docs/screenshots/setup.png" width="200" alt="Setup Screen"/>
-  <img src="docs/screenshots/apps.png" width="200" alt="Apps Screen"/>
-  <img src="docs/screenshots/terminal.png" width="200" alt="Terminal Screen"/>
-  <img src="docs/screenshots/vnc-stream.png" width="200" alt="VNC Streaming"/>
+  <img src="docs/screenshots/setup.png" width="180" alt="Setup Screen"/>
+  <img src="docs/screenshots/apps.png" width="180" alt="Apps Screen"/>
+  <img src="docs/screenshots/terminal.png" width="180" alt="Terminal Screen"/>
+  <img src="docs/screenshots/settings.png" width="180" alt="Settings Screen"/>
+  <img src="docs/screenshots/vnc-stream.png" width="180" alt="VNC Streaming"/>
 </p>
 
-| Setup | Apps | Terminal | VNC Stream |
-|:---:|:---:|:---:|:---:|
-| One-tap Debian setup | Discover installed Linux apps | Built-in shell access | Stream Linux apps fullscreen |
+| Setup | Apps | Terminal | Settings | VNC Stream |
+|:---:|:---:|:---:|:---:|:---:|
+| One-tap Debian setup | Discover & manage Linux apps | Built-in shell access | Theme & streaming config | Stream Linux apps fullscreen |
 
 ## Features
 
